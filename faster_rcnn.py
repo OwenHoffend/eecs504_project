@@ -40,26 +40,41 @@ class ConvNet(nn.Module):
         return self.net(x)
     
 class RPN(nn.Module):
-    def __init__(self, inputSize, layerSize, convSize, anchorNum):
+    def __init__(self, in_channels, hl_size, anchors, conv_size=3, stride=1, padding=1):
         super(RPN, self).__init__()
-        self.inputSize = inputSize
-        self.layerSize = layerSize
-        self.convSize = convSize
-        self.anchorNum = anchorNum
+        self.in_channels = in_channels
+        self.hl_size = hl_size #Hidden layer size
+        self.anchors = anchors #Shape: (k, 4) --> [y, x, aH, aW]
+        self.k, _ = anchors.shape
 
-        self.intermediete = nn.Conv2d(self.inputSize, self.layerSize, self.convSize, stride = 1)
+        self.intermediete = nn.Conv2d(self.in_channels, self.hl_size, kernel_size=conv_size, stride=stride, padding=padding)
         self.relu1 = nn.ReLU(inplace=True)
-        self.classificaiton = nn.Conv2D(self.layerSize, self.anchorNum, 1)
-        self.regression = nn.Conv2d(self.layerSize, 4 * self.anchorNum, 1)
+        self.classificaiton = nn.Conv2D(self.hl_size, self.k, kernel_size=1)
+        self.regression = nn.Conv2d(self.hl_size, 4 * self.k, kernel_size=1)
         
     def forward(self, x):
         """
         x: Shape (C, H, W)
+        score: Shape (k, H, W)
+        reg: Shape (4 * k, H, W)
         """
+        _, H, W = x.shape
         x = self.relu1(self.intermediete(x))
         score = self.classifation(x)
-        reg = self.regression(x)
-        return score, reg #<-- reg is still given wrt anchor coordinates
+        reg = self.regression(x).view(4, k, H, W)
+
+        #Adjust anchors based on computed regression parameters
+        rois = torch.zeros_like(reg)
+        for i in range(4): #Loop over the anchor params: y, x, H, W
+            t = reg[i,:,:,:]
+            anchors = self.anchors[:, i].view(k, 1, 1)
+            if i < 2: #Center location adjustment
+                adjusted = t * anchors + anchors
+            else: #Height/Width adjustment
+                adjusted = torch.exp(t) * anchors
+            #TODO: May need to convert these to integers
+            rois[i,:,:,:] = adjusted
+        return score, rois
 
 class ROI_Pool(nn.Module):
     def __init__(self, PH, PW, scale=1):
@@ -71,7 +86,7 @@ class ROI_Pool(nn.Module):
     def forward(self, feature_map, rois):
         """
         feature_map: Shape (C, H, W)
-        rois: Shape (N, 4) --> [y, x, rH, rW]
+        rois: Shape (N, 4) --> [y, x, rH, rW], specified as center & height/width
         output: Shape (N, C, PH, PW)
         """
         C, H, W = feature_map.shape
@@ -83,8 +98,11 @@ class ROI_Pool(nn.Module):
         assert (H / self.PH).is_integer() and (W / self.PW).is_integer()
 
         for r in range(N):
-            y, x, rH, rW = rois[r, :]
-            region = feature_map[:, y:y+rH, x:x+rW]
+            y, x, rH, rW = rois[r, :] #Region center and height/width
+            assert rH & 1 and rW & 1 #Ensure that the ROI box has odd height/width
+            rHo = ((rH-1)/2).int()
+            rWo = ((rW-1)/2).int()
+            region = feature_map[:, y-rHo:y+rHo+1, x-rWo:x+rWo+1]
             m[r, :, :, :] = self.pool(region)
         return m
 
@@ -107,10 +125,10 @@ if __name__ == "__main__":
     ])
     test_features = test_features.view(1, 3, 3)
     rois = torch.tensor([
-        [0, 0, 2, 2],
-        [1, 0, 1, 3],
-        [1, 1, 2, 2]
+        [0, 0, 1, 1],
+        [1, 1, 1, 3],
+        [1, 1, 3, 3]
     ])
-    r_pool = ROI_Pool(2, 2)
+    r_pool = ROI_Pool(1, 1)
     result = r_pool.forward(test_features, rois)
     print(result)
