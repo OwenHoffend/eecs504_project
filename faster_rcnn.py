@@ -27,7 +27,7 @@ fc_net_arch = [
 
 #Overall top level module
 class Faster_RCNN(nn.Module):
-    def __init__(self, only_rpn=True):
+    def __init__(self, only_rpn=False):
         super(Faster_RCNN, self).__init__()
         self.only_rpn = only_rpn
         self.cnn = ConvNet(conv_net_arch)
