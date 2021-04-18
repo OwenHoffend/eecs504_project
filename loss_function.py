@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[4]:
-
-
 import torch
 import torchvision
 import torch.nn as nn
@@ -25,7 +22,7 @@ def rpn_loss(pred_anchor_locs, pre_cls_scores, anchor_locations, anchor_labels):
     rpn_score = pre_cls_scores[0]
     gt_rpn_loc = torch.from_numpy(anchor_locations)
     gt_rpn_score = torch.from_numpy(anchor_labels)
-    rpn_cls_loss = F.cross_entropy(rpn_score, gt_rpn_score_long()., ignore_index = -1)
+    rpn_cls_loss = F.cross_entropy(rpn_score, gt_rpn_score_long(), ignore_index = -1)
     #Regression
     pos = gt_rpn_score > 0
     mask = pos.unsqueeze(1).expand_as(rpn_loc) #?
