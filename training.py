@@ -11,10 +11,7 @@ momentum = 0.9
 
 batch_size = 66
 
-def train_model(model, dataloaders, criterion, save_dir = None, num_epochs=25):
-
-    #FIXME: Finish this function
-
+def train_model(model, dataloaders, criterion, only_rpn=False, save_dir = None, num_epochs=25):
     optimizer = optim.SGD(model.parameters(), lr=lr, momentum=momentum)
     for epoch in range(num_epochs):
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
@@ -32,8 +29,12 @@ def train_model(model, dataloaders, criterion, save_dir = None, num_epochs=25):
                 labels = labels.to(device)
                 lens = lens.to(device)
 
-                activations = model(inputs)
-                loss = criterion(activations, labels)
+                if only_rpn:
+                    reg, score = model(inputs)
+                    loss = criterion()
+                else:
+                    activations = model(inputs)
+                    loss = criterion(activations, labels)
 
                 if phase == 'training':
                     model.zero_grad()
@@ -43,7 +44,7 @@ def train_model(model, dataloaders, criterion, save_dir = None, num_epochs=25):
 def train_rpn():
     frcnn = models.Faster_RCNN(only_rpn=True).to(device)
     dataloaders = data_loader.get_dataloaders(batch_size)
-    train_model(frcnn, dataloaders, None)
+    train_model(frcnn, dataloaders, loss_function.rpn_loss, only_rpn=True)
 
 if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

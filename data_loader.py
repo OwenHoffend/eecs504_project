@@ -60,10 +60,14 @@ class ImgDataSet(Dataset):
         return tensor_image, boxes, len(labels)
 
 def get_dataloaders(batch_size, shuffle = True):
+
+    mean = [0.485, 0.456, 0.406]
+    std = [0.229, 0.224, 0.225]
+
     composed_transform = transforms.Compose([
         #transforms.Resize(input_size),
-        transforms.ToTensor()
-        #transforms.Normalize(mean, std)
+        transforms.ToTensor(),
+        transforms.Normalize(mean, std)
     ])
     data_transforms = {
         'training': composed_transform,

@@ -42,10 +42,10 @@ class Faster_RCNN(nn.Module):
         feature_map = self.cnn(x)
         print(feature_map.shape)
         reg, score, rois = self.rpn(feature_map)
-        if not self.only_rpn:
-            pass
-        else:
+        if self.only_rpn:
             return reg, score
+        else:
+            pass
 
 class ConvNet(nn.Module):
     def __init__(self, cfg, in_channels=3, init_weights=True):

@@ -1,15 +1,6 @@
-#!/usr/bin/env python
-# coding: utf-8
-
 import torch
-import torchvision
-import torch.nn as nn
 import torch.nn.functional as F
-from torchvision import transforms
-import matplotlib.pyplot as plt
 import numpy as np
-import cv2
-from PIL import Image
 
 # RPN Loss
 # pred_anchor_locs :output from the regression layer
@@ -39,3 +30,28 @@ def rpn_loss(pred_anchor_locs, pre_cls_scores, anchor_locations, anchor_labels):
     
     return total_loss
 
+# Fast RCNN loss
+def roi_loss(gt_roi_locs, gt_roi_labels, roi_cls_score, roi_cls_loc):
+    
+    gt_roi_loc = torch.from_numpy(gt_roi_locs)
+    gt_roi_label = torch.from_numpy(np.float32(gt_roi_labels)).long()
+    
+    #Classification loss
+    roi_cls_loss = F.cross_entropy(roi_cls_score, gt_roi_label, ignore_index=-1)
+    
+    #Regression loss
+    n_sample = roi_cls_loc.shape[0] 
+    roi_loc = roi_cls_loc.view(n_sample, -1, 4) #([128,2,4])
+    roi_loc = roi_loc[torch.arange(0, n_sample).long(), gt_roi_label] #([128,4])
+    pos = gt_roi_label > 0
+    mask = pos.unsqueeze(1).expand_as(roi_loc) #([128,4])
+    mask_loc_preds = roi_loc[mask].view(-1,4)
+    mask_loc_targets = gt_roi_loc[mask].view(-1,4)
+    x = torch.abs(mask_loc_targets - mask_loc_pred)
+    roi_loc_loss = ((x<1).float()*0.5*x**2) + ((x>=1).float()*(x-0.5))
+    
+    roi_lambda = 10
+    
+    total_loss = roi_cls_loss + (roi_lambda * roi_loc_loss)
+    
+    return total_loss
