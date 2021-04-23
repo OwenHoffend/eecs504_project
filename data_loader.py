@@ -50,17 +50,16 @@ class ImgDataSet(Dataset):
         image = Image.open(img_loc).convert("RGB")
         tensor_image = self.transform(image)
         labels = self._get_labels(self.all_imgs[idx])
-        boxes = torch.zeros((4, max_labels[self.main_dir.split('\\')[-1]]))
+        boxes = torch.zeros((max_labels[self.main_dir.split('\\')[-1]], 4))
         for idx, box in enumerate(labels):
             box2d = box['box2d']
-            boxes[0, idx] = box2d['x1']
-            boxes[1, idx] = box2d['x2']
-            boxes[2, idx] = box2d['y1']
-            boxes[3, idx] = box2d['y2']
+            boxes[idx, 0] = box2d['x1']
+            boxes[idx, 1] = box2d['x2']
+            boxes[idx, 2] = box2d['y1']
+            boxes[idx, 3] = box2d['y2']
         return tensor_image, boxes, len(labels)
 
 def get_dataloaders(batch_size, shuffle = True):
-
     mean = [0.485, 0.456, 0.406]
     std = [0.229, 0.224, 0.225]
 

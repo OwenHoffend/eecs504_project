@@ -2,56 +2,105 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 
-# RPN Loss
-# pred_anchor_locs :output from the regression layer
-# pred_cls_scores :output from the classfication layer
-def rpn_loss(pred_anchor_locs, pre_cls_scores, anchor_locations, anchor_labels):
-    #Classification
-    pred_anchor_locs = pred_anchor_locs.permute(0, 2, 3, 1).contiguous().view(1, -1, 4)
-    pred_cls_scores = pre_cls_scores.permute(0, 2, 3, 1).contiguous().view(1, -1 , 2)
-    rpn_loc = pred_anchor_locs[0]
-    rpn_score = pre_cls_scores[0]
-    gt_rpn_loc = torch.from_numpy(anchor_locations)
-    gt_rpn_score = torch.from_numpy(anchor_labels)
-    rpn_cls_loss = F.cross_entropy(rpn_score, gt_rpn_score_long(), ignore_index = -1)
-    #Regression
-    pos = gt_rpn_score > 0
-    mask = pos.unsqueeze(1).expand_as(rpn_loc) #?
-    mask_loc_preds = rpn_loc[mask].view(-1, 4)
-    mask_loc_targets = gt_rpn_loc[mask].view(-1, 4)
-    
-    x = torch.abs(mask_loc_targets - mask_loc_preds)
-    rpn_loc_loss = ((x<1).float() * 0.5 * x**2)+((x >= 1).float() * (x-0.5))
-    
-    rpn_lambda = 10
-    N_reg = (gt_rpn_score > 0).float().sum()
-    rpn_loc_loss = rpn_cls_loss.sum() / N_reg
-    total_loss = rpn_cls_loss + (rpn_lambda * rpn_loc_loss)
-    
-    return total_loss
+def box_minmax_form(boxes):
+    """
+    Convert from y,x,h,w form to y1,x1,y2,x2 form for a shape [N, M, 4] batch of boxes
+    Returns another shape [N, M, 4] tensor
+    """
+    return torch.cat((boxes[:,:,:2] - boxes[:,:,2:]/2,     # ymin, xmin
+                     boxes[:,:,:2] + boxes[:,:,2:]/2), 2)  # ymax, xmax
 
-# Fast RCNN loss
-def roi_loss(gt_roi_locs, gt_roi_labels, roi_cls_score, roi_cls_loc):
-    
-    gt_roi_loc = torch.from_numpy(gt_roi_locs)
-    gt_roi_label = torch.from_numpy(np.float32(gt_roi_labels)).long()
-    
-    #Classification loss
-    roi_cls_loss = F.cross_entropy(roi_cls_score, gt_roi_label, ignore_index=-1)
-    
-    #Regression loss
-    n_sample = roi_cls_loc.shape[0] 
-    roi_loc = roi_cls_loc.view(n_sample, -1, 4) #([128,2,4])
-    roi_loc = roi_loc[torch.arange(0, n_sample).long(), gt_roi_label] #([128,4])
-    pos = gt_roi_label > 0
-    mask = pos.unsqueeze(1).expand_as(roi_loc) #([128,4])
-    mask_loc_preds = roi_loc[mask].view(-1,4)
-    mask_loc_targets = gt_roi_loc[mask].view(-1,4)
-    x = torch.abs(mask_loc_targets - mask_loc_pred)
-    roi_loc_loss = ((x<1).float()*0.5*x**2) + ((x>=1).float()*(x-0.5))
-    
-    roi_lambda = 10
-    
-    total_loss = roi_cls_loss + (roi_lambda * roi_loc_loss)
-    
-    return total_loss
+def box_yxhw_form(boxes):
+    """
+    Convert from y1,x2,y2,x2 form to y,x,h,w form for a shape [N, M, 4] batch of boxes
+    Returns another shape [N, M, 4] tensor
+    """
+    return torch.cat(((boxes[:,:,2:] + boxes[:,:,:2])/2,  # cx, cy
+                     boxes[:,:,2:] - boxes[:,:,:2]), 2)  # w, h
+
+def batch_jaccard(anchors, labels):
+    """
+    Computes jaccard similarity (IoU) for a batch of anchor boxes
+    anchors is of shape: [N, A, 4]
+    labels is of shape: [N, B, 4]
+    Output is of shape: [N, A, B]
+    """
+    N, A, _ = anchors.shape
+    B = labels.size(1)
+    max_xy = torch.min(anchors[:,:,2:].unsqueeze(2).expand(N, A, B, 2),
+                        labels[:,:,2:].unsqueeze(1).expand(N, A, B, 2))
+    min_xy = torch.max(anchors[:,:,:2].unsqueeze(2).expand(N, A, B, 2),
+                        labels[:,:,:2].unsqueeze(1).expand(N, A, B, 2))
+    inter = torch.clamp((max_xy - min_xy), min=0)
+    intersect = inter[:,:,:,0] * inter[:,:,:,1]
+
+    area_a = ((anchors[:,:,2]-anchors[:,:,0]) *
+              (anchors[:,:,3]-anchors[:,:,1])).unsqueeze(2).expand_as(intersect)
+    area_b = ((labels[:,:,2]-labels[:,:,0]) *
+              (labels[:,:,3]-labels[:,:,1])).unsqueeze(1).expand_as(intersect)
+    union = area_a + area_b - intersect
+    return intersect / union
+
+def rpn_loss(reg, score, anchors, labels, device):
+    #Intersection over union criteria
+    anchors_minmax = box_minmax_form(anchors)
+    iou = batch_jaccard(anchors_minmax, labels)
+    N, A, B = iou.shape
+
+    #Thresholding for overlapping anchors
+    p_star = torch.where(torch.any(iou > 0.7, 2), torch.ones(N,A).to(device), torch.zeros(N,A).to(device))
+    p_inds = torch.argmax(iou, axis=1)
+    for i in range(N): #Might need to rewrite if these loops are too slow
+        for j in range(B):
+            ind = p_inds[i, j]
+            if ind != 0:
+                p_star[i, ind] = 1 #Set inds that are maximum IoU
+
+    #Get the ground truth regression parameters
+    labels_yxhw = box_yxhw_form(labels)
+    t_star = torch.zeros_like(reg)
+
+    #TODO: Finish
+
+    #Class loss
+    cls_loss = -torch.sum(p_star * torch.log(score + 1e-15)) / (A*N)
+
+    #Compute the overall cost function
+    #TODO: Finish
+
+if __name__ == "__main__":
+    pass
+    #Test box_minmax_form
+    #boxes = torch.tensor([
+    #    [[0,0,2,2],
+    #    [1,1,3,3],
+    #    [4,5,1,2]],
+    #    [[0,0,2,2],
+    #    [1,1,3,3],
+    #    [4,5,1,2]]
+    #])
+    #print(boxes.shape)
+    #result = box_minmax_form(boxes)
+    #print(result.shape)
+    #print(result)
+
+    #Test intersect
+    #boxes1 = torch.tensor([
+    #    [[0, 0, 2, 2], 
+    #     [0, 0, 3, 3]],
+    #    [[0, 0, 2, 2],
+    #     [0, 0, 3, 3]]
+    #])
+
+    #boxes2 = torch.tensor([
+    #    [[1, 1, 2, 2], 
+    #     [0, 0, 3, 3],
+    #     [0, 0, 1, 1]],
+    #    [[1, 1, 2, 2],
+    #     [0, 0, 3, 3],
+    #     [1, 1, 1, 1]]
+    #])
+
+    #sect = intersect(boxes1, boxes2)
+    #print(sect.shape)
+    #print(sect)

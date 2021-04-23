@@ -9,7 +9,8 @@ from tqdm import tqdm
 lr = 0.01
 momentum = 0.9
 
-batch_size = 66
+#batch_size = 66 #Uses too much VRAM on my 1050ti unfortunately :(
+batch_size = 11
 
 def train_model(model, dataloaders, criterion, only_rpn=False, save_dir = None, num_epochs=25):
     optimizer = optim.SGD(model.parameters(), lr=lr, momentum=momentum)
@@ -30,8 +31,8 @@ def train_model(model, dataloaders, criterion, only_rpn=False, save_dir = None, 
                 lens = lens.to(device)
 
                 if only_rpn:
-                    reg, score = model(inputs)
-                    loss = criterion()
+                    reg, score, anchors = model(inputs)
+                    loss = criterion(reg, score, anchors, labels, device)
                 else:
                     activations = model(inputs)
                     loss = criterion(activations, labels)
@@ -41,8 +42,8 @@ def train_model(model, dataloaders, criterion, only_rpn=False, save_dir = None, 
                     loss.backward()
                     optimizer.step()
 
-def train_rpn():
-    frcnn = models.Faster_RCNN(only_rpn=True).to(device)
+def train_rpn(device):
+    frcnn = models.Faster_RCNN(device, only_rpn=True).to(device)
     dataloaders = data_loader.get_dataloaders(batch_size)
     train_model(frcnn, dataloaders, loss_function.rpn_loss, only_rpn=True)
 
@@ -52,5 +53,5 @@ if __name__ == "__main__":
         print("Using the GPU!")
     else:
         print("WARNING: Could not find GPU! Using CPU only.")
-    train_rpn()
+    train_rpn(device)
 

@@ -17,6 +17,8 @@ conv_net_arch = [ #Architecture loosely modeled after AlexNet, with a few change
     {'out_channels': 192, 'kernel': 3, 'stride': 1, 'padding': 1},
     {'out_channels': 128, 'kernel': 3, 'stride': 1, 'padding': 1}
 ]
+conv_net_scale_factor = 2 #Divide img W/H by scale factor to get feature map size
+
 rpn_hidden_layers = 256
 rpn_a_scales = [8, 16, 30]
 #rpn_a_scales = [16, 32, 60]
@@ -27,11 +29,12 @@ fc_net_arch = [
 
 #Overall top level module
 class Faster_RCNN(nn.Module):
-    def __init__(self, only_rpn=False):
+    def __init__(self, device, only_rpn=False):
         super(Faster_RCNN, self).__init__()
+        self.device = device
         self.only_rpn = only_rpn
         self.cnn = ConvNet(conv_net_arch)
-        self.rpn = RPN(conv_net_arch[-1]['out_channels'], rpn_hidden_layers, rpn_a_scales, rpn_a_ratios)
+        self.rpn = RPN(device, conv_net_arch[-1]['out_channels'], rpn_hidden_layers, rpn_a_scales, rpn_a_ratios)
 
         #Rest of the network
         #if not only_rpn:
@@ -40,10 +43,9 @@ class Faster_RCNN(nn.Module):
 
     def forward(self, x):
         feature_map = self.cnn(x)
-        print(feature_map.shape)
         reg, score, rois = self.rpn(feature_map)
         if self.only_rpn:
-            return reg, score
+            return reg, score, self.rpn.anchors * conv_net_scale_factor
         else:
             pass
 
@@ -78,8 +80,9 @@ class ConvNet(nn.Module):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
     
 class RPN(nn.Module):
-    def __init__(self, in_channels, hl_size, a_scales, a_ratios, conv_size=3, stride=1, padding=1, init_weights=True):
+    def __init__(self, device, in_channels, hl_size, a_scales, a_ratios, conv_size=3, stride=1, padding=1, init_weights=True):
         super(RPN, self).__init__()
+        self.device = device
         self.in_channels = in_channels
         self.hl_size = hl_size #Hidden layer size
         self.a_scales = a_scales
@@ -96,60 +99,62 @@ class RPN(nn.Module):
 
         if init_weights:
             self._initialize_weights()
-
-    def _get_anchors(self, H, W):
-        self.anchors = torch.zeros((4, self.k, H, W))
-
-        #Center coordinates correspond to the current index only
-        for h in range(H):
-            for w in range(W):
-                self.anchors[0,:,h,w] = h
-                self.anchors[1,:,h,w] = w
-
-        #Uncomment commented sections below to show anchor perceptive fields
-        #image = np.zeros((H,W,3), np.uint8)
-        #tcx, tcy = W/2, H/2
-
-        for i, scale in enumerate(self.a_scales):
-            for j, ratio in enumerate(self.a_ratios):
-                ah = scale * np.sqrt(ratio)
-                aw = scale * np.sqrt(1./ratio)
-                self.anchors[2,i*len(self.a_ratios)+j,:,:] = ah
-                self.anchors[3,i*len(self.a_ratios)+j,:,:] = aw
-                #x1 = int(np.round(tcx-aw/2))
-                #x2 = int(np.round(tcx+aw/2))
-                #y1 = int(np.round(tcy-ah/2))
-                #y2 = int(np.round(tcy+ah/2))
-                #cv2.rectangle(image,(x1,y1),(x2,y2),(255,0,0),1) # add rectangle to image
-        #plt.imshow(image)
-        #plt.show()
         
     def forward(self, x):
         """
-        x: Shape (C, H, W)
-        score: Shape (k, H, W)
+        x: Shape (N, C, H, W)
+        score: Shape (N, k, H, W)
         reg: Shape (4 * k, H, W)
         """
-        _, _, H, W = x.shape
+        N, _, H, W = x.shape
+        num_anchors = self.k * H * W
         x = self.relu_inter(self.intermediete(x))
-        score = self.relu_cls(self.classification(x))
-        reg = self.relu_reg(self.regression(x).view(4, self.k, H, W)) #Shape [1, 4 * k, H, W] --> [4, k, H, W]
+        score = self.relu_cls(self.classification(x)).view(N, num_anchors)
 
+        reg_test = self.relu_reg(self.regression(x)) 
+        reg = reg_test.view(N, 4, num_anchors).transpose(1,2) #Shape [N, kHW, 4]
+
+        #Get anchors
         if self.anchors == None: #Allow multiple invocations of forward to share anchors (for performance)
-            self._get_anchors(H, W) #Shape [4, k, H, W]
+            anchors = torch.zeros((4, self.k, H, W)).to(self.device)
+
+            #Center coordinates correspond to the current index only
+            for h in range(H):
+                for w in range(W):
+                    anchors[0,:,h,w] = h
+                    anchors[1,:,h,w] = w
+
+            #Uncomment commented sections below to show anchor perceptive fields
+            #image = np.zeros((H,W,3), np.uint8)
+            #tcx, tcy = W/2, H/2
+
+            for i, scale in enumerate(self.a_scales):
+                for j, ratio in enumerate(self.a_ratios):
+                    ah = scale * np.sqrt(ratio)
+                    aw = scale * np.sqrt(1./ratio)
+                    anchors[2,i*len(self.a_ratios)+j,:,:] = ah
+                    anchors[3,i*len(self.a_ratios)+j,:,:] = aw
+                    #x1 = int(np.round(tcx-aw/2))
+                    #x2 = int(np.round(tcx+aw/2))
+                    #y1 = int(np.round(tcy-ah/2))
+                    #y2 = int(np.round(tcy+ah/2))
+                    #cv2.rectangle(image,(x1,y1),(x2,y2),(255,0,0),1) # add rectangle to image
+            #plt.imshow(image)
+            #plt.show()
+            self.anchors = anchors.expand(N, 4, self.k, H, W).view(N, 4, num_anchors).transpose(1,2) #Shape [N, kHW, 4]
 
         #Adjust anchors based on computed regression parameters
-        rois = torch.zeros_like(reg)
+        rois = torch.zeros_like(reg).to(self.device)
         for i in range(4): #Loop over the anchor params: y, x, H, W
-            t = reg[i,:,:,:]
-            anchors = self.anchors[i,:,:,:]
+            t = reg[:,:,i]
+            anchors = self.anchors[:,:,i]
             if i < 2: #Center location adjustment
-                wh = self.anchors[i+2,:,:,:]
+                wh = self.anchors[:,:,i+2]
                 adjusted = t * wh + anchors
             else: #Height/Width adjustment
                 adjusted = torch.exp(t) * anchors
-            rois[i,:,:,:] = adjusted
-        return reg, score, rois.view(4, self.k * H * W).T #rois output is reshaped to conform to ROI_Pool input requirements
+            rois[:,:,i] = adjusted
+        return reg, score, rois
 
     def _initialize_weights(self):
         for m in self.modules():
@@ -165,14 +170,17 @@ class ROI_Pool(nn.Module): #Non-differentiable, see the Faster R-CNN paper secti
         
     def forward(self, feature_map, rois):
         """
-        feature_map: Shape (C, H, W)
-        rois: Shape (N, 4) --> [y, x, rH, rW], specified as center & height/width
-        (where N = HWk)
+        feature_map: Shape (N, C, H, W)
+        rois: Shape (N, M, 4) --> [y, x, rH, rW], specified as center & height/width
+        (where M = HWk)
         output: Shape (N, C, PH, PW)
         """
-        C, H, W = feature_map.shape
-        N, _ = rois.shape
+        N, C, H, W = feature_map.shape
+        _, M, _ = rois.shape
         m = torch.zeros((N, C, self.PH, self.PW))
+
+        #FIXME: The rest of this function needs to have the batch dimension added
+        #NOTE: The old M dimension was labelled as N
 
         #Sanity checks
         assert self.PH <= H and self.PW <= W
@@ -195,6 +203,7 @@ class ROI_Pool(nn.Module): #Non-differentiable, see the Faster R-CNN paper secti
                 amax = torch.tensor(lim-1).int()
             return amin, amax
 
+        #FIXME: Don't expect this loop to work until the batch dimension is added
         for r in range(N):
             y, x, rH, rW = torch.round(rois[r, :]).int() #Region center and height/width
             ymin, ymax = get_bounds(y, rH, H)
