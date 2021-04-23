@@ -223,6 +223,7 @@ class FC_Net(nn.Module):
             layers.append(('conv' + str(iter), nn.Linear(in_features=last_ch, out_features=out_features, bias=True)))
             layers.append(('relu' + str(iter), nn.ReLU(inplace=True)))
             #Might need dropout
+            layers.append(('dropout' + str(iter), nn.Dropout(0.3, inplace=False)))
             last_ch = out_features
 
         self.net =  nn.Sequential(OrderedDict(layers))
