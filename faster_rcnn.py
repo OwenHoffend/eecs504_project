@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 
 from collections import OrderedDict
 
+import util
+
 #Network architecture parameters
 conv_net_arch = [ #Architecture loosely modeled after AlexNet, with a few changes to make it smaller
     {'out_channels': 48, 'kernel': 9, 'stride': 1, 'padding': 4},
@@ -119,10 +121,10 @@ class RPN(nn.Module):
             anchors = torch.zeros((4, self.k, H, W)).to(self.device)
 
             #Center coordinates correspond to the current index only
-            for h in range(H):
-                for w in range(W):
-                    anchors[0,:,h,w] = h
-                    anchors[1,:,h,w] = w
+            for y in range(H):
+                for x in range(W):
+                    anchors[0,:,y,x] = y
+                    anchors[1,:,y,x] = x
 
             #Uncomment commented sections below to show anchor perceptive fields
             #image = np.zeros((H,W,3), np.uint8)
@@ -241,6 +243,7 @@ class FC_Net(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
 if __name__ == "__main__":
+    device = util.get_device()
     """
     Test ROI_Pool
     feature_map: (3, 64, 64)
@@ -276,7 +279,7 @@ if __name__ == "__main__":
     #score, rois = rpn.forward(x)
 
     """Test Faster_RCNN top class"""
-    frcnn = Faster_RCNN()
+    frcnn = Faster_RCNN(device)
     test_img = torch.rand((1, 3, 90, 160))
     frcnn.forward(test_img)
     print(frcnn)

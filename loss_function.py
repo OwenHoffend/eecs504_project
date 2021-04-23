@@ -1,64 +1,47 @@
 import torch
 import torch.nn.functional as F
 import numpy as np
+import cv2
+import matplotlib.pyplot as plt
+import util
 
-def box_minmax_form(boxes):
-    """
-    Convert from y,x,h,w form to y1,x1,y2,x2 form for a shape [N, M, 4] batch of boxes
-    Returns another shape [N, M, 4] tensor
-    """
-    return torch.cat((boxes[:,:,:2] - boxes[:,:,2:]/2,     # ymin, xmin
-                     boxes[:,:,:2] + boxes[:,:,2:]/2), 2)  # ymax, xmax
-
-def box_yxhw_form(boxes):
-    """
-    Convert from y1,x2,y2,x2 form to y,x,h,w form for a shape [N, M, 4] batch of boxes
-    Returns another shape [N, M, 4] tensor
-    """
-    return torch.cat(((boxes[:,:,2:] + boxes[:,:,:2])/2,  # cx, cy
-                     boxes[:,:,2:] - boxes[:,:,:2]), 2)  # w, h
-
-def batch_jaccard(anchors, labels):
-    """
-    Computes jaccard similarity (IoU) for a batch of anchor boxes
-    anchors is of shape: [N, A, 4]
-    labels is of shape: [N, B, 4]
-    Output is of shape: [N, A, B]
-    """
-    N, A, _ = anchors.shape
-    B = labels.size(1)
-    max_xy = torch.min(anchors[:,:,2:].unsqueeze(2).expand(N, A, B, 2),
-                        labels[:,:,2:].unsqueeze(1).expand(N, A, B, 2))
-    min_xy = torch.max(anchors[:,:,:2].unsqueeze(2).expand(N, A, B, 2),
-                        labels[:,:,:2].unsqueeze(1).expand(N, A, B, 2))
-    inter = torch.clamp((max_xy - min_xy), min=0)
-    intersect = inter[:,:,:,0] * inter[:,:,:,1]
-
-    area_a = ((anchors[:,:,2]-anchors[:,:,0]) *
-              (anchors[:,:,3]-anchors[:,:,1])).unsqueeze(2).expand_as(intersect)
-    area_b = ((labels[:,:,2]-labels[:,:,0]) *
-              (labels[:,:,3]-labels[:,:,1])).unsqueeze(1).expand_as(intersect)
-    union = area_a + area_b - intersect
-    return intersect / union
-
-def rpn_loss(reg, score, anchors, labels, device):
+def rpn_loss(reg, score, anchors, labels, lens, device, img=None):
     #Intersection over union criteria
-    anchors_minmax = box_minmax_form(anchors)
-    iou = batch_jaccard(anchors_minmax, labels)
+    anchors_minmax = util.box_minmax_form(anchors)
+    iou = util.batch_jaccard(anchors_minmax, labels)
     N, A, B = iou.shape
 
     #Thresholding for overlapping anchors
-    p_star = torch.where(torch.any(iou > 0.7, 2), torch.ones(N,A).to(device), torch.zeros(N,A).to(device))
+    #These are constant so no need to worry about backprop
+    p_star = torch.where(torch.any(iou > 0.5, 2), torch.ones(N,A).to(device), torch.zeros(N,A).to(device))
     p_inds = torch.argmax(iou, axis=1)
     for i in range(N): #Might need to rewrite if these loops are too slow
         for j in range(B):
             ind = p_inds[i, j]
-            if ind != 0:
+            if iou[i, ind, j] > 0:
                 p_star[i, ind] = 1 #Set inds that are maximum IoU
 
+    #p_star : shape [N, A]
+
+    #Display some of the selected anchors just to make sure that this works
+    if img != None:
+        img_ind = 10
+        np_img = np.array(img[img_ind,:,:,:].permute(1,2,0)).astype(np.uint8).copy()
+        selected_anchors = p_star[img_ind] == 1
+        disp_anchors = anchors_minmax[img_ind, selected_anchors, :]
+        util.add_bbs(np_img, disp_anchors, (0,0,255))
+        util.add_bbs(np_img, labels[img_ind,0:lens[img_ind],:], (255,0,0))
+
+        plt.imshow(np_img)
+        plt.show()
+
     #Get the ground truth regression parameters
-    labels_yxhw = box_yxhw_form(labels)
+    labels_yxhw = util.box_yxhw_form(labels)
     t_star = torch.zeros_like(reg)
+
+    #For each anchor: compute the regression parameter based on the closest ground truth box
+    #Again: these are just constant so no need to worry about backprop
+    r_inds = torch.argmax(iou, axis=2) #Should be dim [N, A]
 
     #TODO: Finish
 
@@ -69,20 +52,19 @@ def rpn_loss(reg, score, anchors, labels, device):
     #TODO: Finish
 
 if __name__ == "__main__":
-    pass
     #Test box_minmax_form
-    #boxes = torch.tensor([
-    #    [[0,0,2,2],
-    #    [1,1,3,3],
-    #    [4,5,1,2]],
-    #    [[0,0,2,2],
-    #    [1,1,3,3],
-    #    [4,5,1,2]]
-    #])
-    #print(boxes.shape)
-    #result = box_minmax_form(boxes)
-    #print(result.shape)
-    #print(result)
+    boxes = torch.tensor([
+        [[0,0,2,2],
+        [1,1,3,3],
+        [4,5,1,2]],
+        [[0,0,2,2],
+        [1,1,3,3],
+        [4,5,1,2]]
+    ])
+    print(boxes.shape)
+    result = util.box_minmax_form(boxes)
+    print(result.shape)
+    print(result)
 
     #Test intersect
     #boxes1 = torch.tensor([

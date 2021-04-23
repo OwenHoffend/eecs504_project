@@ -1,6 +1,7 @@
 import faster_rcnn as models
 import data_loader
 import loss_function
+import util
 
 import torch
 import torch.optim as optim
@@ -25,14 +26,14 @@ def train_model(model, dataloaders, criterion, only_rpn=False, save_dir = None, 
             else:
                 model.eval()   # Set model to evaluate mode
 
-            for inputs, labels, lens in tqdm(dataloaders[phase]):
+            for img, inputs, labels, lens in tqdm(dataloaders[phase]):
                 inputs = inputs.to(device)
                 labels = labels.to(device)
                 lens = lens.to(device)
 
                 if only_rpn:
                     reg, score, anchors = model(inputs)
-                    loss = criterion(reg, score, anchors, labels, device)
+                    loss = criterion(reg, score, anchors, labels, lens, device, img=img)
                 else:
                     activations = model(inputs)
                     loss = criterion(activations, labels)
@@ -48,10 +49,6 @@ def train_rpn(device):
     train_model(frcnn, dataloaders, loss_function.rpn_loss, only_rpn=True)
 
 if __name__ == "__main__":
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    if torch.cuda.is_available():
-        print("Using the GPU!")
-    else:
-        print("WARNING: Could not find GPU! Using CPU only.")
+    device = util.get_device()
     train_rpn(device)
 

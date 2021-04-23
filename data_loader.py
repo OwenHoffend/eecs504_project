@@ -47,17 +47,18 @@ class ImgDataSet(Dataset):
 
     def __getitem__(self, idx):
         img_loc = os.path.join(self.main_dir, self.all_imgs[idx])
-        image = Image.open(img_loc).convert("RGB")
-        tensor_image = self.transform(image)
+        image = Image.open(img_loc)
+        orig_image = torch.round(transforms.ToTensor()(image) * 255).to(torch.uint8)
+        tensor_image = self.transform(image.convert("RGB"))
         labels = self._get_labels(self.all_imgs[idx])
         boxes = torch.zeros((max_labels[self.main_dir.split('\\')[-1]], 4))
         for idx, box in enumerate(labels):
             box2d = box['box2d']
-            boxes[idx, 0] = box2d['x1']
-            boxes[idx, 1] = box2d['x2']
-            boxes[idx, 2] = box2d['y1']
-            boxes[idx, 3] = box2d['y2']
-        return tensor_image, boxes, len(labels)
+            boxes[idx, 0] = box2d['y1']
+            boxes[idx, 1] = box2d['x1']
+            boxes[idx, 2] = box2d['y2']
+            boxes[idx, 3] = box2d['x2']
+        return orig_image, tensor_image, boxes, len(labels)
 
 def get_dataloaders(batch_size, shuffle = True):
     mean = [0.485, 0.456, 0.406]
