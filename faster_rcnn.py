@@ -90,7 +90,8 @@ class RPN(nn.Module):
         self.a_scales = a_scales
         self.a_ratios = a_ratios
         self.k = len(a_scales) * len(a_ratios)
-        self.anchors = None #Populated by forward
+        self.anchors_ = None #Populated by forward (underlying structure)
+        self.anchors = None #View of internal anchor data expanded to the correct shape
 
         self.intermediete = nn.Conv2d(self.in_channels, self.hl_size, kernel_size=conv_size, stride=stride, padding=padding)
         self.relu_inter = nn.ReLU(inplace=True)
@@ -117,14 +118,14 @@ class RPN(nn.Module):
         reg = reg_test.view(N, 4, num_anchors).transpose(1,2) #Shape [N, kHW, 4]
 
         #Get anchors
-        if self.anchors == None: #Allow multiple invocations of forward to share anchors (for performance)
-            anchors = torch.zeros((4, self.k, H, W)).to(self.device)
+        if self.anchors_ == None: #Allow multiple invocations of forward to share anchors (for performance)
+            self.anchors_ = torch.zeros((4, self.k, H, W)).to(self.device)
 
             #Center coordinates correspond to the current index only
             for y in range(H):
                 for x in range(W):
-                    anchors[0,:,y,x] = y
-                    anchors[1,:,y,x] = x
+                    self.anchors_[0,:,y,x] = y
+                    self.anchors_[1,:,y,x] = x
 
             #Uncomment commented sections below to show anchor perceptive fields
             #image = np.zeros((H,W,3), np.uint8)
@@ -134,8 +135,8 @@ class RPN(nn.Module):
                 for j, ratio in enumerate(self.a_ratios):
                     ah = scale * np.sqrt(ratio)
                     aw = scale * np.sqrt(1./ratio)
-                    anchors[2,i*len(self.a_ratios)+j,:,:] = ah
-                    anchors[3,i*len(self.a_ratios)+j,:,:] = aw
+                    self.anchors_[2,i*len(self.a_ratios)+j,:,:] = ah
+                    self.anchors_[3,i*len(self.a_ratios)+j,:,:] = aw
                     #x1 = int(np.round(tcx-aw/2))
                     #x2 = int(np.round(tcx+aw/2))
                     #y1 = int(np.round(tcy-ah/2))
@@ -143,7 +144,7 @@ class RPN(nn.Module):
                     #cv2.rectangle(image,(x1,y1),(x2,y2),(255,0,0),1) # add rectangle to image
             #plt.imshow(image)
             #plt.show()
-            self.anchors = anchors.expand(N, 4, self.k, H, W).view(N, 4, num_anchors).transpose(1,2) #Shape [N, kHW, 4]
+        self.anchors = self.anchors_.expand(N, 4, self.k, H, W).view(N, 4, num_anchors).transpose(1,2) #Shape [N, kHW, 4]
 
         #Adjust anchors based on computed regression parameters
         rois = torch.zeros_like(reg).to(self.device)

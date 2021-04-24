@@ -13,15 +13,13 @@ def rpn_loss(reg, score, anchors, labels, lens, device, img=None):
 
     #Thresholding for overlapping anchors
     #These are constant so no need to worry about backprop
-    p_star = torch.where(torch.any(iou > 0.5, 2), torch.ones(N,A).to(device), torch.zeros(N,A).to(device))
+    p_star = torch.where(torch.any(iou > 0.5, 2), torch.ones(N,A).to(device), torch.zeros(N,A).to(device)) #Shape [N, A]
     p_inds = torch.argmax(iou, axis=1)
     for i in range(N): #Might need to rewrite if these loops are too slow
         for j in range(B):
             ind = p_inds[i, j]
             if iou[i, ind, j] > 0:
                 p_star[i, ind] = 1 #Set inds that are maximum IoU
-
-    #p_star : shape [N, A]
 
     #Display some of the selected anchors just to make sure that this works
     if img != None:
@@ -35,21 +33,27 @@ def rpn_loss(reg, score, anchors, labels, lens, device, img=None):
         plt.imshow(np_img)
         plt.show()
 
-    #Get the ground truth regression parameters
-    labels_yxhw = util.box_yxhw_form(labels)
-    t_star = torch.zeros_like(reg)
-
+    #REGRESSION LOSS
     #For each anchor: compute the regression parameter based on the closest ground truth box
     #Again: these are just constant so no need to worry about backprop
-    r_inds = torch.argmax(iou, axis=2) #Should be dim [N, A]
+    labels_yxhw = util.box_yxhw_form(labels) #Shape [N, B, 4]
+    r_inds = torch.argmax(iou, axis=2) #Shape [N, A]
+    gt_star = labels_yxhw.view(N * B, 4)[r_inds.view(N * A), :].view(N, A, 4)
 
-    #TODO: Finish
+    #Get the ground truth regression parameters
+    t_star = torch.zeros_like(reg) #Shape [N, A, 4]. Inherits cuda specification from reg
+    t_star[:,:,:2] = (gt_star[:,:,:2] - anchors[:,:,:2])/anchors[:,:,2:]
+    t_star[:,:,2:] = torch.log(gt_star[:,:,2:] + 1e-15 / anchors[:,:,2:])
+    reg_loss = torch.sum(F.smooth_l1_loss(reg, t_star, reduction='none'), dim=2)
+    reg_loss = torch.sum(p_star * reg_loss) / (A*N*4)
 
-    #Class loss
+    #CLASS LOSS
     cls_loss = -torch.sum(p_star * torch.log(score + 1e-15)) / (A*N)
 
-    #Compute the overall cost function
-    #TODO: Finish
+    #OVERALL COST FUNCTION
+    lambda_ = 1 #(for now)
+    return cls_loss + lambda_ * reg_loss
+
 
 if __name__ == "__main__":
     #Test box_minmax_form
