@@ -1,0 +1,1 @@
+{"name": "b1e88fd2-c1e4fd2b-0000013.jpg", "video_name": "b1e88fd2-c1e4fd2b", "index": 12, "labels": [{"id": "00128819", "category": "car", "attributes": {"Crowd": true, "Occluded": true, "Truncated": false}, "box2d": {"x1": 69.33009984102499, "x2": 73.85162809152662, "y1": 52.51001474915893, "y2": 54.3588186381293}}]}

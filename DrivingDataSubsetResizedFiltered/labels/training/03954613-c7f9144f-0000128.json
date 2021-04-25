@@ -1,0 +1,1 @@
+{"name": "03954613-c7f9144f-0000128.jpg", "video_name": "03954613-c7f9144f", "index": 127, "labels": [{"id": "00085325", "category": "car", "attributes": {"Crowd": false, "Occluded": true, "Truncated": true}, "box2d": {"x1": 28.79310344827586, "x2": 160.0, "y1": 34.48275862068966, "y2": 83.62068965517241}}]}
