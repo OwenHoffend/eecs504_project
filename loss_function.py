@@ -66,8 +66,8 @@ def rpn_loss(reg, score, anchors, labels, lens, rois, device, img=None):
     del iou
     del t_star
     del p_star
-    roi_iou = torch.sum(util.batch_jaccard(rois_minmax[img_ind, top_indices, :].view(1, lens[img_ind], 4), \
-                    labels[img_ind, :, :].view(1, B, 4))) / (lens[img_ind]*B + 1e-6)
+    roi_iou = torch.sum(util.jaccard(rois_minmax[img_ind, top_indices, :], \
+                        labels[img_ind, :, :])) / (lens[img_ind]*B + 1e-6)
 
     #OVERALL COST FUNCTION
     return cls_loss + lambda_ * reg_loss, cls_loss, reg_loss, roi_iou
