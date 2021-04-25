@@ -131,3 +131,8 @@ dmypy.json
 tr_his.pkl
 val_his.pkl
 weights/RCNN.pth
+weights/RCNN_train.pth
+
+*.jpg
+*.json
+DrivingDataSubsetResizedFiltered_gt5/labels/.DS_Store

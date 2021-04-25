@@ -21,7 +21,7 @@ conv_net_arch = [ #Architecture loosely modeled after AlexNet, with a few change
 ]
 conv_net_scale_factor = 2 #Divide img W/H by scale factor to get feature map size
 
-rpn_hidden_layers = 256
+rpn_hidden_layers = 64
 rpn_a_scales = [8, 16, 30]
 #rpn_a_scales = [16, 32, 60]
 rpn_a_ratios = [0.5, 1., 2.]
@@ -84,7 +84,7 @@ class ConvNet(nn.Module):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
     
 class RPN(nn.Module):
-    def __init__(self, device, in_channels, hl_size, a_scales, a_ratios, conv_size=5, stride=1, padding=2, init_weights=True):
+    def __init__(self, device, in_channels, hl_size, a_scales, a_ratios, conv_size=3, stride=1, padding=1, init_weights=True):
         super(RPN, self).__init__()
         self.device = device
         self.in_channels = in_channels

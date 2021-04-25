@@ -15,9 +15,9 @@ from PIL import Image
     #Validation: 399
     #Test: Missing 
 
-img_dir = os.path.join(os.getcwd(), "DrivingDataSubsetResized\\images\\")
-label_dir = os.path.join(os.getcwd(), "DrivingDataSubsetResized\\labels\\")
-max_labels = {'validation':48, 'testing':50, 'training':38}
+img_dir = os.path.join(os.getcwd(), "DrivingDataSubsetResizedFiltered\\images\\")
+label_dir = os.path.join(os.getcwd(), "DrivingDataSubsetResizedFiltered\\labels\\")
+max_labels = {'validation':42, 'testing':50, 'training':33}
 
 def get_max_labels():
     for phase in ['training', 'validation']:
@@ -75,15 +75,15 @@ def get_dataloaders(batch_size, shuffle = True):
         'testing': composed_transform
     }
     image_datasets = {x: ImgDataSet(os.path.join(img_dir, x), os.path.join(label_dir, x), data_transforms[x]) for x in data_transforms.keys()}
-    return {x: DataLoader(image_datasets[x], batch_size=batch_size, shuffle=False if x != 'train' else shuffle, num_workers=2) for x in data_transforms.keys()}
+    return {x: DataLoader(image_datasets[x], batch_size=batch_size, shuffle=False if x != 'training' else shuffle, num_workers=2) for x in data_transforms.keys()}
 
 if __name__ == "__main__":
     batch_size = 66
-    dataloaders_dict = get_dataloaders(batch_size)
-    #get_max_labels()
+    #dataloaders_dict = get_dataloaders(batch_size)
+    get_max_labels()
     print('# of training samples {}'.format(len(dataloaders_dict['training'].dataset))) 
     print('# of validation samples {}'.format(len(dataloaders_dict['validation'].dataset)))  
     print('# of test samples {}'.format(len(dataloaders_dict['testing'].dataset)))
 
-    for img, boxes, lens in dataloaders_dict['training']:
-        pass
+    #for img, boxes, lens in dataloaders_dict['training']:
+    #    pass
