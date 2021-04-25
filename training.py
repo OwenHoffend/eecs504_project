@@ -20,7 +20,7 @@ momentum = 0.9
 #batch_size = 66 #Uses too much VRAM on my 1050ti unfortunately :(
 batch_size = 11
 
-def train_model(model, dataloaders, criterion, only_rpn=False, save_dir=None, num_epochs=2, show_output=False):
+def train_model(model, dataloaders, criterion, only_rpn=False, save_dir=None, num_epochs=1000, show_output=False):
     optimizer = optim.SGD(model.parameters(), lr=lr, momentum=momentum)
 
     val_loss_history = []

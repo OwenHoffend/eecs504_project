@@ -15,9 +15,35 @@ from PIL import Image
     #Validation: 399
     #Test: Missing 
 
-img_dir = os.path.join(os.getcwd(), "DrivingDataSubsetResizedFiltered\\images\\")
-label_dir = os.path.join(os.getcwd(), "DrivingDataSubsetResizedFiltered\\labels\\")
+img_dir = os.path.join(os.getcwd(), "DrivingDataSubsetResizedFiltered_gt5\\images\\")
+label_dir = os.path.join(os.getcwd(), "DrivingDataSubsetResizedFiltered_gt5\\labels\\")
 max_labels = {'validation':42, 'testing':50, 'training':33}
+
+def filter_json():
+    image_dir2 = "DrivingDataSubsetResizedFiltered_gt5\\images\\"
+    label_dir2 = "DrivingDataSubsetResizedFiltered_gt5\\labels\\"
+    for phase in ['training', 'validation']:
+        label_loc = os.path.join(label_dir2, phase)
+        for fn in os.listdir(label_loc):
+            fp = os.path.join(label_loc, fn)
+            with open(fp, 'r') as f:
+                labels = json.load(f)['labels']
+                new_labels = {'labels': []}
+                for item in labels:
+                    if 'box2d' in item.keys():
+                        box2d = item['box2d']
+                        y1 = box2d['y1']
+                        x1 = box2d['x1']
+                        y2 = box2d['y2']
+                        x2 = box2d['x2']
+                        if abs(y2 - y1) > 5 and abs(x2 - x1) > 5:
+                            new_labels['labels'].append(item)
+            if new_labels['labels'] != []:
+                with open(fp, 'w') as fw:
+                    json.dump(new_labels, fw)
+            else:
+                os.remove(fp)
+                os.remove(os.path.join(image_dir2, phase, fn.split('.')[0] + '.jpg'))
 
 def get_max_labels():
     for phase in ['training', 'validation']:
@@ -78,12 +104,13 @@ def get_dataloaders(batch_size, shuffle = True):
     return {x: DataLoader(image_datasets[x], batch_size=batch_size, shuffle=False if x != 'training' else shuffle, num_workers=2) for x in data_transforms.keys()}
 
 if __name__ == "__main__":
-    batch_size = 66
+    filter_json()
+    #batch_size = 66
     #dataloaders_dict = get_dataloaders(batch_size)
-    get_max_labels()
-    print('# of training samples {}'.format(len(dataloaders_dict['training'].dataset))) 
-    print('# of validation samples {}'.format(len(dataloaders_dict['validation'].dataset)))  
-    print('# of test samples {}'.format(len(dataloaders_dict['testing'].dataset)))
+    #get_max_labels()
+    #print('# of training samples {}'.format(len(dataloaders_dict['training'].dataset))) 
+    #print('# of validation samples {}'.format(len(dataloaders_dict['validation'].dataset)))  
+    #print('# of test samples {}'.format(len(dataloaders_dict['testing'].dataset)))
 
     #for img, boxes, lens in dataloaders_dict['training']:
     #    pass
