@@ -128,3 +128,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 .vscode/launch.json
+tr_his.pkl
+val_his.pkl
+weights/RCNN.pth

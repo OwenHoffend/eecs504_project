@@ -45,9 +45,11 @@ class Faster_RCNN(nn.Module):
 
     def forward(self, x):
         feature_map = self.cnn(x)
+        #plt.plot(feature_map[0, 0, :, :].to(cpu))
+        #plt.show()
         reg, score, rois = self.rpn(feature_map)
         if self.only_rpn:
-            return reg, score, self.rpn.anchors * conv_net_scale_factor
+            return reg, score, self.rpn.anchors * conv_net_scale_factor, rois * conv_net_scale_factor
         else:
             pass
 
@@ -82,7 +84,7 @@ class ConvNet(nn.Module):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
     
 class RPN(nn.Module):
-    def __init__(self, device, in_channels, hl_size, a_scales, a_ratios, conv_size=3, stride=1, padding=1, init_weights=True):
+    def __init__(self, device, in_channels, hl_size, a_scales, a_ratios, conv_size=5, stride=1, padding=2, init_weights=True):
         super(RPN, self).__init__()
         self.device = device
         self.in_channels = in_channels
@@ -96,9 +98,8 @@ class RPN(nn.Module):
         self.intermediete = nn.Conv2d(self.in_channels, self.hl_size, kernel_size=conv_size, stride=stride, padding=padding)
         self.relu_inter = nn.ReLU(inplace=True)
         self.classification = nn.Conv2d(self.hl_size, self.k, kernel_size=1)
-        self.relu_cls = nn.ReLU(inplace=True)
+        self.sigmoid_cls = nn.Sigmoid()
         self.regression = nn.Conv2d(self.hl_size, 4 * self.k, kernel_size=1)
-        self.relu_reg = nn.ReLU(inplace=True)
 
         if init_weights:
             self._initialize_weights()
@@ -112,10 +113,9 @@ class RPN(nn.Module):
         N, _, H, W = x.shape
         num_anchors = self.k * H * W
         x = self.relu_inter(self.intermediete(x))
-        score = self.relu_cls(self.classification(x)).view(N, num_anchors)
+        score = self.sigmoid_cls(self.classification(x)).view(N, num_anchors)
 
-        reg_test = self.relu_reg(self.regression(x)) 
-        reg = reg_test.view(N, 4, num_anchors).transpose(1,2) #Shape [N, kHW, 4]
+        reg = self.regression(x).view(N, 4, num_anchors).transpose(1,2)
 
         #Get anchors
         if self.anchors_ == None: #Allow multiple invocations of forward to share anchors (for performance)
