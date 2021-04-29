@@ -14,11 +14,11 @@ import os
 
 img_rate = 5
 save_rate = 10
-lr = 0.01
+lr = 0.02
 momentum = 0.9
 
 #batch_size = 66 #Uses too much VRAM on my 1050ti unfortunately :(
-batch_size = 11
+batch_size = 20
 
 def train_model(model, dataloaders, criterion, only_rpn=False, save_dir=None, num_epochs=1000, show_output=False):
     optimizer = optim.SGD(model.parameters(), lr=lr, momentum=momentum)
@@ -83,11 +83,12 @@ def train_model(model, dataloaders, criterion, only_rpn=False, save_dir=None, nu
                     optimizer.step()
             
                     epoch_train_start = False
+                    if epoch % 3 == 0:
+                        torch.cuda.empty_cache()
                 else:
                     epoch_val_start = False
 
             #del model.rpn.anchors
-            #torch.cuda.empty_cache()
             avg_loss /= loop_iters
             avg_cls_loss /= loop_iters
             avg_reg_loss /= loop_iters
@@ -110,11 +111,13 @@ def train_model(model, dataloaders, criterion, only_rpn=False, save_dir=None, nu
                 best_iou = avg_roi_iou
 
             if phase == 'validation':
-                val_loss_history.append(avg_loss)
-                val_iou_history.append(avg_roi_iou)
+                val_loss_history.append(avg_loss.detach().clone())
+                val_iou_history.append(avg_roi_iou.detach().clone())
             else:
-                tr_loss_history.append(avg_loss)
-                tr_iou_history.append(avg_roi_iou)
+                tr_loss_history.append(avg_loss.detach().clone())
+                tr_iou_history.append(avg_roi_iou.detach().clone())
+                for g in optimizer.param_groups:
+                    g['lr'] = lr * (0.992 ** epoch)
 
     print('Best loss: {:4f}'.format(best_val_loss))
     print('Best iou history: {:4f}'.format(best_iou))

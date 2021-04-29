@@ -134,5 +134,10 @@ weights/RCNN.pth
 weights/RCNN_train.pth
 
 *.jpg
+*.png
 *.json
 DrivingDataSubsetResizedFiltered_gt5/labels/.DS_Store
+weights/RCNN - Copy.pth
+weights/RCNN_train - Copy.pth
+output.txt
+output2.txt

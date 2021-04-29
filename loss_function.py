@@ -45,6 +45,12 @@ def rpn_loss(reg, score, anchors, labels, lens, rois, device, img=None):
     img_ind = 0 #Arbitrary
     top_values, top_indices = torch.topk(score[img_ind], lens[img_ind])
 
+    #ROI IOU
+    del iou
+    del t_star
+    roi_iou = torch.sum(util.jaccard(rois_minmax[img_ind, top_indices, :], \
+                        labels[img_ind, :, :])) / (lens[img_ind]*B + 1e-6)
+
     #Display some of the selected anchors just to make sure that this works
     lambda_ = 100 #(for now)
     if img != None:
@@ -56,18 +62,14 @@ def rpn_loss(reg, score, anchors, labels, lens, rois, device, img=None):
 
         #Plot top k bounding boxes based on score
         util.add_bbs(np_img, rois_minmax[img_ind, top_indices, :], (0, 255, 64))
+        fig = plt.figure()
         plt.imshow(np_img)
+        max_roi = roi_iou
+        fig.savefig('figs\\img_roi_{}.png'.format(str(roi_iou.item())), dpi=fig.dpi)
         plt.show(block=False)
         plt.pause(5)
         plt.close()
 
-    #ROI IOU
-    del anchors_minmax
-    del iou
-    del t_star
-    del p_star
-    roi_iou = torch.sum(util.jaccard(rois_minmax[img_ind, top_indices, :], \
-                        labels[img_ind, :, :])) / (lens[img_ind]*B + 1e-6)
 
     #OVERALL COST FUNCTION
     return cls_loss + lambda_ * reg_loss, cls_loss, reg_loss, roi_iou
